@@ -1,0 +1,135 @@
+From 91b20bd0d4443e5efdf845321209b2f317f0360a Mon Sep 17 00:00:00 2001
+From: syed yaseer ahmed <kitsyaseer@gmail.com>
+Date: Wed, 1 Jul 2020 21:07:47 +0530
+Subject: [PATCH] Create Patch File
+
+---
+ src/DataManipulator.ts | 53 ++++++++++++++++++++++++++----------------
+ src/Graph.tsx          | 29 ++++++++++++++++-------
+ 2 files changed, 54 insertions(+), 28 deletions(-)
+
+diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
+index f6b15ff..cdadacd 100644
+--- a/src/DataManipulator.ts
++++ b/src/DataManipulator.ts
+@@ -1,20 +1,33 @@
+-import { ServerRespond } from './DataStreamer';
+-
+-export interface Row {
+-  stock: string,
+-  top_ask_price: number,
+-  timestamp: Date,
+-}
+-
+-
+-export class DataManipulator {
+-  static generateRow(serverResponds: ServerRespond[]): Row[] {
+-    return serverResponds.map((el: any) => {
+-      return {
+-        stock: el.stock,
+-        top_ask_price: el.top_ask && el.top_ask.price || 0,
+-        timestamp: el.timestamp,
+-      };
+-    })
+-  }
+-}
++import { ServerRespond } from './DataStreamer';
++
++export interface Row {
++  price_abc: number,
++  price_def: number,
++  ratio: number,
++  timestamp: Date,
++  upper_bound: number,
++  lower_bound: number,
++  trigger_alert: number | undefined,
++}
++
++
++export class DataManipulator {
++  static generateRow(serverRespond: ServerRespond[]): Row {
++    const priceABC = (serverRespond[0].top_ask.price + serverRespond[0].top_bid.price) / 2;
++    const priceDEF = (serverRespond[1].top_ask.price + serverRespond[1].top_bid.price) / 2;
++    const ratio = priceABC / priceDEF;
++    const upperBound = 1 + 0.05;
++    const lowerBound = 1 - 0.05;
++      return {
++        price_abc: priceABC,
++        price_def: priceDEF,
++        ratio,
++        timestamp: serverRespond[0].timestamp > serverRespond[1].timestamp ?
++          serverRespond[1].timestamp : serverRespond[1].timestamp,
++        upper_bound: upperBound,
++        lower_bound: lowerBound,
++        trigger_alert: (ratio > upperBound || ratio < lowerBound) ? ratio : undefined,
++      };
++    }
++  }
++
+diff --git a/src/Graph.tsx b/src/Graph.tsx
+index 58fb997..1e328d1 100644
+--- a/src/Graph.tsx
++++ b/src/Graph.tsx
+@@ -19,14 +19,24 @@ class Graph extends Component<IProps, {}> {
+   }
+ 
+   componentDidMount() {
++    if(this.table){
++      this.table.update([
++        DataManipulator.generateRow(this.props.data),
++      ]);
++    }
++  
+     // Get element from the DOM.
+     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
+ 
+     const schema = {
+       stock: 'string',
+-      top_ask_price: 'float',
+-      top_bid_price: 'float',
++      price_abc: 'float',
++      price_def: 'float',
++      ratio: 'float',
+       timestamp: 'date',
++      upper_bound: 'float',
++      lower_bound: 'float',
++      trigger_alert: 'float',
+     };
+ 
+     if (window.perspective && window.perspective.worker()) {
+@@ -36,23 +46,26 @@ class Graph extends Component<IProps, {}> {
+       // Load the `table` in the `<perspective-viewer>` DOM reference.
+       elem.load(this.table);
+       elem.setAttribute('view', 'y_line');
+-      elem.setAttribute('column-pivots', '["stock"]');
+       elem.setAttribute('row-pivots', '["timestamp"]');
+-      elem.setAttribute('columns', '["top_ask_price"]');
++      elem.setAttribute('columns', '["ratio","lower_bound","upper_bound","trigger_alert"]');
+       elem.setAttribute('aggregates', JSON.stringify({
+         stock: 'distinctcount',
+-        top_ask_price: 'avg',
+-        top_bid_price: 'avg',
++        price_abc: 'avg',
++        price_def: 'avg',
++        ratio: 'avg',
+         timestamp: 'distinct count',
++        upper_bound: 'avg',
++        lower_bound: 'avg',
++        trigger_aleert: 'avg',
+       }));
+     }
+   }
+ 
+   componentDidUpdate() {
+     if (this.table) {
+-      this.table.update(
++      this.table.update([
+         DataManipulator.generateRow(this.props.data),
+-      );
++      ]);
+     }
+   }
+ }
+-- 
+2.24.0
+
